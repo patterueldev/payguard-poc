@@ -109,6 +109,7 @@ The consumer will:
 - **Port**: 3000
 - **Status**: Running in Docker container, serving static assets
 - **API calls**: Uses `http://localhost:8000` (from browser context)
+- **CORS**: ✅ Fully configured - frontend can make API calls
 
 ### API (FastAPI)
 - **Location**: `api/main.py` with Dockerfile
@@ -119,6 +120,7 @@ The consumer will:
   - Transaction validation
   - Kafka integration (lazy-initialized)
   - Redis caching support
+  - ✅ CORS enabled for http://localhost:3000
 
 ### Kafka & Zookeeper
 - **Status**: Running, healthy, fully operational
@@ -211,10 +213,11 @@ docker compose exec kafka kafka-broker-api-versions --bootstrap-server localhost
 ## Commits
 
 ```
+186cd4c - Add CORS support for frontend on localhost:3000
+78a73ac - Add comprehensive system status documentation
 6749318 - Fix frontend API URL - use localhost instead of Docker DNS
 53afc9e - Fix Docker build issues - Complete working solution!
 c260f14 - Add FastAPI backend to docker-compose
-982b70a - Add frontend service to docker-compose.yml
 ...
 ```
 
