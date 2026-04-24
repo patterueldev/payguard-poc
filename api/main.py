@@ -32,8 +32,8 @@ import logging
 SECRET_KEY = "payguard-demo-secret-key-change-in-production"
 ALGORITHM = "HS256"
 
-# Kafka bootstrap server
-KAFKA_BROKER = "localhost:9092"
+# Kafka bootstrap server (use 'kafka:29092' for Docker internal, localhost:9092 for host access)
+KAFKA_BROKER = "kafka:29092"
 KAFKA_TOPIC = "transactions"
 
 # Logging setup
@@ -75,8 +75,8 @@ def get_kafka_producer():
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 acks='all',
                 retries=3,
-                api_version_auto_discovery_interval_ms=5000,
-                request_timeout_ms=10000
+                request_timeout_ms=10000,
+                api_version=(2, 5, 0)  # Specify Kafka API version
             )
             logger.info(f"[KAFKA PRODUCER] Initialized, broker={KAFKA_BROKER}, topic={KAFKA_TOPIC}")
         except Exception as e:
