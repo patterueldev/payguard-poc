@@ -28,8 +28,8 @@ interface Result {
   timestamp: string;
 }
 
-// Default to Docker API service name (will be overridden by environment variable if needed)
-const API_BASE_URL = 'http://api:8000';
+// Use localhost when browser accesses from host machine
+const API_BASE_URL = 'http://localhost:8000';
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({
