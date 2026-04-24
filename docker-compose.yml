@@ -47,6 +47,28 @@ services:
     volumes:
       - redis_data:/data
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    networks:
+      - payguard-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
 volumes:
   redis_data:
 

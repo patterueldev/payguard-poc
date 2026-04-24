@@ -2,6 +2,28 @@
 
 Complete guide for running the PayGuard fraud detection system with the React web interface.
 
+## 🎉 FASTEST START - Docker-Integrated Frontend
+
+**NEW**: The React frontend is now integrated into Docker Compose!
+
+```bash
+# Start EVERYTHING (infrastructure + frontend) with ONE command
+docker compose up
+
+# In another terminal, start the API
+source venv/bin/activate
+uvicorn api.main:app --reload
+
+# In another terminal, start the consumer
+cd consumer && python pipeline.py
+
+# Open browser: http://localhost:3000
+```
+
+✨ **No manual npm dev server needed!** The frontend runs as an optimized production build inside Docker.
+
+For more details: See `DOCKER_QUICK_START.md`
+
 ## System Architecture
 
 ```
