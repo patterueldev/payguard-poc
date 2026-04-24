@@ -14,6 +14,7 @@ scores, rather than failing entirely. This ensures uptime even during partial ou
 
 import redis
 import logging
+import os
 from pybreaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,13 @@ logger = logging.getLogger(__name__)
 class DecisionEngine:
     """Makes final approve/block decisions with resilience patterns"""
     
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379):
+    def __init__(self, redis_host: str = None, redis_port: int = None):
+        # Support environment variables for Docker deployments
+        if redis_host is None:
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+        if redis_port is None:
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        
         self.redis_client = redis.Redis(
             host=redis_host,
             port=redis_port,

@@ -14,6 +14,7 @@ Each step is independently verifiable, making it suitable for academic demonstra
 
 import json
 import logging
+import os
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 
@@ -25,9 +26,18 @@ from decision import DecisionEngine
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-KAFKA_BROKER = "localhost:9092"
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC = "transactions"
 KAFKA_GROUP = "fraud-detection-consumer-group"
+
+# Redis configuration
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+
+# ML Models configuration
+ML_MODELS_DIR = os.getenv("ML_MODELS_DIR", "models")
+LAYER1_PATH = os.path.join(ML_MODELS_DIR, "layer1.pkl")
+LAYER2_PATH = os.path.join(ML_MODELS_DIR, "layer2.pkl")
 
 # Logging setup
 logging.basicConfig(
@@ -49,20 +59,20 @@ def initialize_pipeline():
     
     # Feature extraction
     feature_extractor = FeatureExtractor(
-        redis_host="localhost",
-        redis_port=6379
+        redis_host=REDIS_HOST,
+        redis_port=REDIS_PORT
     )
     
     # Model scoring
     model_scorer = ModelScorer(
-        layer1_path="models/layer1.pkl",
-        layer2_path="models/layer2.pkl"
+        layer1_path=LAYER1_PATH,
+        layer2_path=LAYER2_PATH
     )
     
     # Decision engine with circuit breaker
     decision_engine = DecisionEngine(
-        redis_host="localhost",
-        redis_port=6379
+        redis_host=REDIS_HOST,
+        redis_port=REDIS_PORT
     )
     
     # Kafka consumer

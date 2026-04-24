@@ -15,6 +15,7 @@ context to improve model decision quality.
 import redis
 import numpy as np
 import logging
+import os
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)
@@ -22,13 +23,20 @@ logger = logging.getLogger(__name__)
 class FeatureExtractor:
     """Extracts and engineers features from transactions"""
     
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379):
+    def __init__(self, redis_host: str = None, redis_port: int = None):
+        # Support environment variables for Docker deployments
+        if redis_host is None:
+            redis_host = os.getenv("REDIS_HOST", "localhost")
+        if redis_port is None:
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        
         self.redis_client = redis.Redis(
             host=redis_host,
             port=redis_port,
             decode_responses=True
         )
         logger.info(f"[FEATURE EXTRACTOR] Initialized, redis={redis_host}:{redis_port}")
+    
     
     def get_user_profile(self, user_id: str) -> Dict[str, float]:
         """

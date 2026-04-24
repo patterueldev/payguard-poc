@@ -14,15 +14,35 @@ are delegated to a more expensive deep model. This optimizes latency vs. accurac
 
 import pickle
 import logging
+import os
 from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
+# Import model classes - they may be at /app/ml_models or /models in different contexts
+try:
+    # Docker context
+    from ml_models import Layer1MockModel, Layer2MockModel
+except ImportError:
+    try:
+        # Local context (when running from host)
+        from models import Layer1MockModel, Layer2MockModel
+    except ImportError:
+        pass
+
 class ModelScorer:
     """Loads and runs fraud detection models"""
     
-    def __init__(self, layer1_path: str = "models/layer1.pkl", 
-                 layer2_path: str = "models/layer2.pkl"):
+    def __init__(self, layer1_path: str = None, layer2_path: str = None):
+        # Auto-detect paths based on context
+        if layer1_path is None:
+            models_dir = os.getenv("ML_MODELS_DIR", "models")
+            layer1_path = os.path.join(models_dir, "layer1.pkl")
+        
+        if layer2_path is None:
+            models_dir = os.getenv("ML_MODELS_DIR", "models")
+            layer2_path = os.path.join(models_dir, "layer2.pkl")
+        
         # Load Layer 1 model
         with open(layer1_path, 'rb') as f:
             self.layer1_model = pickle.load(f)
@@ -70,3 +90,4 @@ class ModelScorer:
         )
         
         return fraud_probability
+

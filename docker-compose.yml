@@ -90,9 +90,26 @@ services:
       - NODE_ENV=production
       - VITE_API_URL=http://localhost:8000
     restart: unless-stopped
-    # NOTE: All services now run in Docker on the same network
-    # Frontend: http://localhost:8000 (Docker service name resolution)
-    # Consumer: Still runs on host, connects to kafka:29092
+
+  consumer:
+    build:
+      context: .
+      dockerfile: consumer/Dockerfile
+    networks:
+      - payguard-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ML_MODELS_DIR=/app/ml_models
+    restart: unless-stopped
+    # Consumer runs indefinitely, consuming messages from Kafka and storing results in Redis
+    # Logs visible via: docker compose logs -f consumer
 
 volumes:
   redis_data:
