@@ -1,19 +1,19 @@
 # PayGuard Fraud Detection - Complete Demo Guide
 
-## Quick Start (5 minutes)
+## Quick Start (2 minutes)
 
 ```bash
-# Terminal 1: Start all services
+# Terminal 1: Start all services (including consumer)
 docker compose up -d --build
 
-# Terminal 2: Start fraud detection consumer
-cd consumer && python3 pipeline.py
+# Terminal 2: Watch consumer logs (real-time fraud detection)
+docker compose logs -f consumer
 
 # Terminal 3: Open in browser
 http://localhost:3000
 ```
 
-Then submit transactions and watch fraud detection work!
+Then submit transactions and watch fraud detection work in real-time!
 
 ---
 
@@ -30,7 +30,7 @@ Transaction → Features → ML Layer 1 → ML Layer 2 → Decision → Risk Ass
 1. **Frontend** (http://localhost:3000) - User submits transactions
 2. **API** (http://localhost:8000) - Validates, publishes to Kafka
 3. **Kafka** - Message broker queues transactions
-4. **Consumer** - Picks up messages and runs ML pipeline
+4. **Consumer** (Docker container) - Picks up messages and runs ML pipeline
 5. **ML Models** - Score fraud risk (0.0-1.0 scale)
 6. **Redis** - Stores final results
 
@@ -52,20 +52,15 @@ Transaction → Features → ML Layer 1 → ML Layer 2 → Decision → Risk Ass
 docker compose ps
 ```
 
-Verify all 5 are "Up":
+Verify all 6 are "Up":
 ```
-zookeeper      - Running
-kafka          - Healthy
-redis          - Healthy
-api            - Healthy with CORS
-frontend       - Healthy
-```
-
-### Consumer Dependencies
-
-```bash
-# Make sure Python packages are installed
-python3 -m pip install --break-system-packages kafka-python redis requests pybreaker
+NAME                    STATUS              PORTS
+payguard-zookeeper      Up                  2181
+payguard-kafka          Healthy             9092
+payguard-redis          Healthy             6379
+payguard-api            Healthy with CORS   8000
+payguard-frontend       Healthy             3000
+payguard-consumer       Up                  (internal)
 ```
 
 ---
@@ -79,22 +74,13 @@ docker compose ps
 ```
 
 **Expected output:**
-```
-NAME                    STATUS              PORTS
-payguard-zookeeper      Up                  2181
-payguard-kafka          Healthy             9092
-payguard-redis          Healthy             6379
-payguard-api            Healthy with CORS   8000
-payguard-frontend       Healthy             3000
-```
+All 6 services should show "Up" status.
 
-### Step 2: Start Consumer Pipeline (1 minute)
+### Step 2: Watch Consumer Logs (1 minute)
 
 ```bash
 # Terminal 2
-cd /Users/pat/Projects/PAT/payguard-poc
-cd consumer
-python3 pipeline.py
+docker compose logs -f consumer
 ```
 
 **Expected output:**
@@ -126,7 +112,7 @@ You'll see the PayGuard transaction form.
 
 ### Step 5: Submit Test Transactions (6 minutes)
 
-Submit these 4 scenarios in order. After each one, watch the Consumer Terminal for output.
+Submit these 4 scenarios in order. After each one, watch the Consumer logs for output.
 
 ---
 
@@ -151,7 +137,7 @@ Description: Morning coffee purchase
 }
 ```
 
-**Watch Consumer Terminal:**
+**Watch consumer logs (from Terminal 2):**
 ```
 [INFO] [TRANSACTION INTAKE] Processing transaction: txn_abc123
 [INFO] Amount: $75.50 | Merchant: Starbucks Coffee
@@ -188,7 +174,7 @@ Description: Laptop purchase
 }
 ```
 
-**Watch Consumer Terminal:**
+**Watch consumer logs (from Terminal 2):**
 ```
 [INFO] [TRANSACTION INTAKE] Processing transaction: txn_def456
 [INFO] Amount: $5000.00 | Merchant: Electronics Store

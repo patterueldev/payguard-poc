@@ -1,19 +1,18 @@
 # 🚀 PayGuard Fraud Detection System - Quick Start
 
-## Get Started in 3 Steps (5 minutes)
+## Get Started in 2 Steps (2 minutes)
 
 ```bash
-# 1️⃣ Start all Docker services
+# 1️⃣ Start all Docker services (including fraud detection consumer)
 docker compose up -d --build
 
-# 2️⃣ Start the fraud detection consumer
-cd consumer && python3 pipeline.py
-
-# 3️⃣ Open the frontend
+# 2️⃣ Open the frontend
 # Visit http://localhost:3000 in your browser
 ```
 
-**That's it!** Now submit transactions and watch fraud detection work in real-time.
+**That's it!** The entire system runs in Docker. Submit transactions and watch fraud detection work in real-time.
+
+Monitor consumer logs with: `docker compose logs -f consumer`
 
 ---
 
