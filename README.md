@@ -1,3 +1,33 @@
+# 🚀 PayGuard Fraud Detection System - Quick Start
+
+## Get Started in 3 Steps (5 minutes)
+
+```bash
+# 1️⃣ Start all Docker services
+docker compose up -d --build
+
+# 2️⃣ Start the fraud detection consumer
+cd consumer && python3 pipeline.py
+
+# 3️⃣ Open the frontend
+# Visit http://localhost:3000 in your browser
+```
+
+**That's it!** Now submit transactions and watch fraud detection work in real-time.
+
+---
+
+### 📚 Full Documentation
+
+- **[DEMO.md](./DEMO.md)** - Complete step-by-step demonstration guide (10 minutes)
+- **[EXPLAIN.md](./EXPLAIN.md)** - System architecture with Mermaid diagrams
+- **[QUICKSTART.md](./QUICKSTART.md)** - Detailed setup guide
+- **[FRAUD_DETECTION_DEMO.md](./FRAUD_DETECTION_DEMO.md)** - Fraud scenarios and examples
+
+---
+
+## System Architecture Overview
+
 Here's the full end-to-end flowchart of the PayGuard system. The flow follows this logic:
 
 Transaction initiated → passes through JWT authentication to verify the caller's identity.
