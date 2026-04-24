@@ -38,6 +38,8 @@ This starts:
 - ✅ Redis
 - ✅ React Frontend (auto-built and running)
 
+**Important**: The frontend is configured to reach the API at `http://host.docker.internal:8000` (special Docker networking that reaches your host machine from inside the container).
+
 ### Step 2: Start API (New Terminal)
 
 ```bash
@@ -164,18 +166,40 @@ docker compose up --build frontend
 
 ### Frontend can't connect to API
 ```bash
-# Make sure API is running
+# Make sure API is running on host at port 8000
 curl http://localhost:8000/health
 # Should return: {"status": "healthy", ...}
+
+# If API is running but frontend still fails:
+# The frontend uses host.docker.internal:8000 to reach the host
+# This is a Docker Desktop feature that maps to localhost on the host
+
+# Verify it's working with:
+docker exec $(docker ps -q -f name=payguard-frontend) \
+  wget --spider -q http://host.docker.internal:8000
+# Should work without error
 ```
 
 ### Port 3000 already in use
 ```bash
 # Find and kill process
-kill -9 $(lsof -t -i :3000)
+lsof -t -i :3000
 
 # Or use different port in docker-compose.yml
 # Change: "3000:3000" to "3001:3000"
+```
+
+### "host.docker.internal" not recognized (Linux only)
+On Linux, `host.docker.internal` may not work. Instead:
+```bash
+# Option 1: Pass host IP to container
+docker compose up --build
+# Then edit docker-compose.yml frontend environment:
+# VITE_API_URL=http://172.17.0.1:8000  (default Docker gateway)
+
+# Option 2: Use network_mode: host (shares host network)
+# Add to frontend service: network_mode: "host"
+# Then remove ports, depends_on conditions
 ```
 
 ## Full System Architecture

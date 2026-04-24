@@ -67,7 +67,11 @@ services:
       retries: 5
     environment:
       - NODE_ENV=production
+      - VITE_API_URL=http://host.docker.internal:8000
     restart: unless-stopped
+    # NOTE: Frontend connects to API running on host machine via host.docker.internal
+    # This allows docker compose up to start infrastructure + frontend,
+    # while API and Consumer run locally on the same machine
 
 volumes:
   redis_data:
