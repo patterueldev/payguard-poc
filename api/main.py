@@ -62,14 +62,27 @@ class TransactionResponse(BaseModel):
 # KAFKA PRODUCER
 # ══════════════════════════════════════════════════════════════════════════════
 
-kafka_producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BROKER,
-    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    acks='all',
-    retries=3
-)
+kafka_producer = None
 
-logger.info(f"[KAFKA PRODUCER] Initialized, broker={KAFKA_BROKER}, topic={KAFKA_TOPIC}")
+def get_kafka_producer():
+    """Lazy initialization of Kafka producer with retry logic"""
+    global kafka_producer
+    if kafka_producer is None:
+        try:
+            kafka_producer = KafkaProducer(
+                bootstrap_servers=KAFKA_BROKER,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                acks='all',
+                retries=3,
+                api_version_auto_discovery_interval_ms=5000,
+                request_timeout_ms=10000
+            )
+            logger.info(f"[KAFKA PRODUCER] Initialized, broker={KAFKA_BROKER}, topic={KAFKA_TOPIC}")
+        except Exception as e:
+            logger.warning(f"[KAFKA PRODUCER] Delayed initialization (will retry on first request): {e}")
+            kafka_producer = None
+            raise
+    return kafka_producer
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUTHENTICATION
@@ -154,7 +167,8 @@ async def submit_transaction(
     
     # Publish to Kafka
     try:
-        future = kafka_producer.send(KAFKA_TOPIC, event)
+        producer = get_kafka_producer()
+        future = producer.send(KAFKA_TOPIC, event)
         future.get(timeout=10)  # Wait for confirmation
         
         logger.info(
@@ -204,7 +218,8 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Shutting down API...")
-    kafka_producer.close()
+    if kafka_producer is not None:
+        kafka_producer.close()
 
 if __name__ == "__main__":
     import uvicorn
