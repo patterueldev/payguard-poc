@@ -47,6 +47,29 @@ services:
     volumes:
       - redis_data:/data
 
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - payguard-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_URL=redis://redis:6379
+    healthcheck:
+      test: python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -60,6 +83,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
     healthcheck:
       test: wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
       interval: 10s
@@ -67,11 +92,11 @@ services:
       retries: 5
     environment:
       - NODE_ENV=production
-      - VITE_API_URL=http://host.docker.internal:8000
+      - VITE_API_URL=http://api:8000
     restart: unless-stopped
-    # NOTE: Frontend connects to API running on host machine via host.docker.internal
-    # This allows docker compose up to start infrastructure + frontend,
-    # while API and Consumer run locally on the same machine
+    # NOTE: All services now run in Docker on the same network
+    # Frontend: http://api:8000 (Docker service name resolution)
+    # Consumer: Still runs on host, connects to kafka:29092
 
 volumes:
   redis_data:

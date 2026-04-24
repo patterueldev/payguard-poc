@@ -1,26 +1,22 @@
-# PayGuard Full Stack - API + Frontend Setup
+# PayGuard Full Stack - Docker-Complete Setup
 
-Complete guide for running the PayGuard fraud detection system with the React web interface.
+Complete guide for running the entire PayGuard fraud detection system in Docker.
 
-## 🎉 FASTEST START - Docker-Integrated Frontend
+## 🎉 COMPLETE DOCKER SETUP - Everything in Containers!
 
-**NEW**: The React frontend is now integrated into Docker Compose!
+**NEW**: All services now run in Docker (infrastructure + API + frontend)!
 
 ```bash
-# Start EVERYTHING (infrastructure + frontend) with ONE command
+# Start EVERYTHING with ONE command
 docker compose up
 
-# In another terminal, start the API
-source venv/bin/activate
-uvicorn api.main:app --reload
-
-# In another terminal, start the consumer
+# In another terminal, start just the consumer
 cd consumer && python pipeline.py
 
 # Open browser: http://localhost:3000
 ```
 
-✨ **No manual npm dev server needed!** The frontend runs as an optimized production build inside Docker.
+✨ **Perfect setup!** All services (Zookeeper, Kafka, Redis, API, Frontend) run in Docker. Only the Consumer (Python) runs on your machine for live development.
 
 For more details: See `DOCKER_QUICK_START.md`
 

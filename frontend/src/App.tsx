@@ -28,10 +28,10 @@ interface Result {
   timestamp: string;
 }
 
-// Use host.docker.internal when running in Docker, localhost when running locally
+// Use Docker service name when in Docker, localhost when running locally
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'http://host.docker.internal:8000'
-  : 'http://localhost:8000';
+  ? 'http://api:8000'              // Docker: use service name (automatically resolves)
+  : 'http://localhost:8000';       // Dev: use localhost
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({
