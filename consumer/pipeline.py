@@ -193,7 +193,8 @@ def process_transaction(transaction, components):
         transaction_id=transaction_id,
         decision=decision,
         layer1_score=layer1_score,
-        layer2_score=layer2_score
+        layer2_score=layer2_score,
+        transaction_data=transaction  # Pass full transaction for pub/sub message
     )
     
     # ─────────────────────────────────────────────────────────────────────────

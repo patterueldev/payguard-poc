@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, Lock, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { AlertCircle, CheckCircle, Clock, Lock, Send, Wifi, WifiOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import './App.css';
 
@@ -28,6 +28,15 @@ interface Result {
   timestamp: string;
 }
 
+interface FraudResult {
+  transaction_id: string;
+  decision: string;
+  fraud_score: number;
+  amount?: number;
+  merchant?: string;
+  timestamp: string;
+}
+
 // Use localhost when browser accesses from host machine
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -46,9 +55,72 @@ const App: React.FC = () => {
   });
 
   const [results, setResults] = useState<Result[]>([]);
+  const [consumerStatus, setConsumerStatus] = useState<FraudResult | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // WebSocket connection management
+  useEffect(() => {
+    const connectWebSocket = () => {
+      try {
+        const wsUrl = 'ws://localhost:8000/ws/fraud-results';
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('[WEBSOCKET] Connected to fraud results stream');
+          setWsConnected(true);
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as FraudResult;
+            console.log('[WEBSOCKET] Received fraud result:', data);
+            setConsumerStatus(data);
+          } catch (e) {
+            console.error('[WEBSOCKET] Failed to parse message:', e);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('[WEBSOCKET] Error:', error);
+          setWsConnected(false);
+        };
+        
+        ws.onclose = () => {
+          console.log('[WEBSOCKET] Disconnected, attempting reconnect...');
+          setWsConnected(false);
+          // Exponential backoff reconnection: 1s → 2s → 4s → 8s
+          const delay = Math.min(1000 * Math.pow(2, 3), 8000);
+          reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
+        };
+        
+        wsRef.current = ws;
+      } catch (e) {
+        console.error('[WEBSOCKET] Connection failed:', e);
+        setWsConnected(false);
+      }
+    };
+    
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Generate JWT token
   const generateToken = async () => {
@@ -173,6 +245,19 @@ const App: React.FC = () => {
     });
   };
 
+  // Pagination helpers
+  const totalPages = Math.ceil(results.length / pageSize);
+  const paginatedResults = results.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
+  const getFraudScoreColor = (score: number): string => {
+    if (score < 0.3) return '#10b981'; // Green - low risk
+    if (score < 0.7) return '#f59e0b'; // Yellow - medium risk
+    return '#ef4444'; // Red - high risk
+  };
+
   return (
     <div className="app">
       <div className="header">
@@ -181,6 +266,88 @@ const App: React.FC = () => {
       </div>
 
       <div className="container">
+        {/* Consumer Status Panel */}
+        <section className="card consumer-card">
+          <div className="card-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {wsConnected ? (
+                <Wifi size={20} style={{ color: '#10b981' }} />
+              ) : (
+                <WifiOff size={20} style={{ color: '#ef4444' }} />
+              )}
+              <h2>Real-Time Consumer Pipeline</h2>
+            </div>
+          </div>
+          <div className="consumer-content">
+            <div className="connection-status">
+              <span className={`status-badge ${wsConnected ? 'connected' : 'disconnected'}`}>
+                {wsConnected ? '● Connected' : '● Disconnected'}
+              </span>
+            </div>
+            
+            {consumerStatus ? (
+              <div className="consumer-status-details">
+                <div className="status-row">
+                  <label>Transaction ID:</label>
+                  <span>{consumerStatus.transaction_id.substring(0, 12)}...</span>
+                </div>
+                {consumerStatus.amount && (
+                  <div className="status-row">
+                    <label>Amount:</label>
+                    <span>${consumerStatus.amount.toFixed(2)}</span>
+                  </div>
+                )}
+                {consumerStatus.merchant && (
+                  <div className="status-row">
+                    <label>Merchant:</label>
+                    <span>{consumerStatus.merchant}</span>
+                  </div>
+                )}
+                <div className="status-row">
+                  <label>Fraud Score:</label>
+                  <div
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: getFraudScoreColor(consumerStatus.fraud_score),
+                      color: 'white',
+                      borderRadius: '4px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {(consumerStatus.fraud_score * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="status-row">
+                  <label>Decision:</label>
+                  <div
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: consumerStatus.decision === 'blocked' ? '#ef4444' : '#10b981',
+                      color: 'white',
+                      borderRadius: '4px',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {consumerStatus.decision}
+                  </div>
+                </div>
+                <div className="status-row">
+                  <label>Processed:</label>
+                  <span>{new Date(consumerStatus.timestamp).toLocaleString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <p>Waiting for fraud detection results...</p>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                  Submit transactions to see results
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Authentication Section */}
         <section className="card auth-card">
           <div className="card-header">
@@ -308,8 +475,58 @@ const App: React.FC = () => {
               <Clock size={20} />
               <h2>Transaction Results</h2>
             </div>
+            
+            {/* Pagination Controls */}
+            <div className="pagination-controls">
+              <div className="pagination-info">
+                <span>
+                  Showing {paginatedResults.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–
+                  {Math.min(currentPage * pageSize, results.length)} of {results.length} transactions
+                </span>
+              </div>
+              
+              <div className="pagination-buttons">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="btn btn-pagination"
+                >
+                  <ChevronLeft size={16} /> Previous
+                </button>
+                
+                <span className="page-indicator">
+                  Page {currentPage} of {totalPages || 1}
+                </span>
+                
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="btn btn-pagination"
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+              
+              <div className="page-size-selector">
+                <label>Items per page:</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(parseInt(e.target.value));
+                    setCurrentPage(1); // Reset to first page
+                  }}
+                  className="select-input"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Results List */}
             <div className="results-list">
-              {results.map((result, idx) => (
+              {paginatedResults.map((result, idx) => (
                 <div key={idx} className="result-item">
                   <div className="result-content">
                     <p className="result-id">

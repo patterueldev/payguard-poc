@@ -13,7 +13,7 @@ hands off responsibility to the message queue. This separation of concerns is
 fundamental to scalable microservices architecture.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -23,6 +23,8 @@ import json
 import uuid
 import time
 import logging
+import redis
+import threading
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -84,6 +86,66 @@ def get_kafka_producer():
             kafka_producer = None
             raise
     return kafka_producer
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REDIS & WEBSOCKET PUBSUB
+# ══════════════════════════════════════════════════════════════════════════════
+
+redis_client = None
+connected_clients = set()
+pubsub_thread = None
+
+def get_redis_client():
+    """Get or create Redis client"""
+    global redis_client
+    if redis_client is None:
+        try:
+            redis_client = redis.Redis(
+                host="redis",
+                port=6379,
+                decode_responses=True
+            )
+            redis_client.ping()
+            logger.info("[REDIS] Connected to Redis")
+        except Exception as e:
+            logger.warning(f"[REDIS] Connection failed: {e}")
+            redis_client = None
+            raise
+    return redis_client
+
+def start_pubsub_listener():
+    """Start background thread to listen for fraud results on Redis pub/sub"""
+    global pubsub_thread
+    
+    def listen_and_broadcast():
+        try:
+            redis_conn = get_redis_client()
+            pubsub = redis_conn.pubsub()
+            pubsub.subscribe("fraud_results")
+            logger.info("[PUBSUB] Listening to 'fraud_results' channel")
+            
+            for message in pubsub.listen():
+                if message["type"] == "message":
+                    try:
+                        data = json.loads(message["data"])
+                        # Broadcast to all connected WebSocket clients
+                        for client in list(connected_clients):
+                            try:
+                                if not client.client_state.value == 0:  # Check if still connected
+                                    client.send_json(data)
+                            except Exception as e:
+                                logger.warning(f"[PUBSUB] Failed to send to client: {e}")
+                                try:
+                                    connected_clients.discard(client)
+                                except:
+                                    pass
+                    except Exception as e:
+                        logger.error(f"[PUBSUB] Failed to parse message: {e}")
+        except Exception as e:
+            logger.error(f"[PUBSUB] Listener error: {e}")
+    
+    pubsub_thread = threading.Thread(target=listen_and_broadcast, daemon=True)
+    pubsub_thread.start()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUTHENTICATION
@@ -211,6 +273,34 @@ async def get_demo_token(user_id: str):
     logger.info(f"[JWT GENERATION] Generated token for user={user_id}")
     return {"access_token": token, "token_type": "bearer"}
 
+@app.websocket("/ws/fraud-results")
+async def websocket_fraud_results(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time fraud detection results.
+    
+    Clients connect and receive live updates when fraud detection completes.
+    Results are streamed from Redis pub/sub channel via background listener.
+    """
+    await websocket.accept()
+    connected_clients.add(websocket)
+    logger.info(f"[WEBSOCKET] Client connected. Total clients: {len(connected_clients)}")
+    
+    try:
+        # Keep connection alive while client is connected
+        while True:
+            # Wait for any client message (optional heartbeat/ping)
+            data = await websocket.receive_text()
+            logger.debug(f"[WEBSOCKET] Received from client: {data}")
+    except WebSocketDisconnect:
+        connected_clients.discard(websocket)
+        logger.info(f"[WEBSOCKET] Client disconnected. Total clients: {len(connected_clients)}")
+    except Exception as e:
+        logger.error(f"[WEBSOCKET] Error: {e}")
+        try:
+            connected_clients.discard(websocket)
+        except:
+            pass
+
 # ══════════════════════════════════════════════════════════════════════════════
 # STARTUP / SHUTDOWN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -224,6 +314,13 @@ async def startup_event():
     logger.info(f"Topic: {KAFKA_TOPIC}")
     logger.info("Listening for authenticated transaction requests...")
     logger.info("="*80)
+    
+    # Start Redis pub/sub listener for WebSocket broadcasts
+    try:
+        get_redis_client()
+        start_pubsub_listener()
+    except Exception as e:
+        logger.warning(f"[STARTUP] Redis pub/sub not available: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():

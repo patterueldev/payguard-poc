@@ -122,8 +122,12 @@ class DecisionEngine:
         return decision
     
     def store_result(self, transaction_id: str, decision: str, 
-                     layer1_score: float, layer2_score: float = None) -> None:
-        """Store decision result in Redis for retrieval"""
+                     layer1_score: float, layer2_score: float = None,
+                     transaction_data: dict = None) -> None:
+        """Store decision result in Redis and publish to pub/sub channel"""
+        import json
+        from datetime import datetime
+        
         key = f"result:{transaction_id}"
         value = {
             "decision": decision,
@@ -136,3 +140,25 @@ class DecisionEngine:
         self.redis_client.setex(key, 3600, str(value))
         
         logger.info(f"[RESULT STORAGE] Stored decision in Redis: {key} = {decision}")
+        
+        # Publish to pub/sub channel for real-time WebSocket updates
+        try:
+            # Build message with transaction details for frontend
+            message = {
+                "transaction_id": transaction_id,
+                "decision": decision,
+                "fraud_score": round(layer2_score, 4) if layer2_score is not None else round(layer1_score, 4),
+                "layer1_score": round(layer1_score, 4),
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            # Add transaction data if provided (amount, merchant)
+            if transaction_data:
+                message["amount"] = transaction_data.get("amount")
+                message["merchant"] = transaction_data.get("merchant")
+            
+            # Publish to Redis pub/sub channel
+            self.redis_client.publish("fraud_results", json.dumps(message))
+            logger.info(f"[RESULT STORAGE] Published result to pub/sub channel: {transaction_id[:8]}... → {decision}")
+        except Exception as e:
+            logger.error(f"[RESULT STORAGE] Failed to publish to pub/sub: {str(e)}")
