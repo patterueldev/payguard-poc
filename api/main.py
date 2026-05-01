@@ -25,6 +25,8 @@ import time
 import logging
 import redis
 import threading
+import asyncio
+from queue import Queue
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -92,7 +94,8 @@ def get_kafka_producer():
 # ══════════════════════════════════════════════════════════════════════════════
 
 redis_client = None
-connected_clients = set()
+message_queue = Queue()  # Thread-safe queue for passing messages
+connected_clients = []  # List of asyncio queues
 pubsub_thread = None
 
 def get_redis_client():
@@ -117,7 +120,7 @@ def start_pubsub_listener():
     """Start background thread to listen for fraud results on Redis pub/sub"""
     global pubsub_thread
     
-    def listen_and_broadcast():
+    def listen_and_queue():
         try:
             redis_conn = get_redis_client()
             pubsub = redis_conn.pubsub()
@@ -128,23 +131,18 @@ def start_pubsub_listener():
                 if message["type"] == "message":
                     try:
                         data = json.loads(message["data"])
-                        # Broadcast to all connected WebSocket clients
-                        for client in list(connected_clients):
-                            try:
-                                if not client.client_state.value == 0:  # Check if still connected
-                                    client.send_json(data)
-                            except Exception as e:
-                                logger.warning(f"[PUBSUB] Failed to send to client: {e}")
-                                try:
-                                    connected_clients.discard(client)
-                                except:
-                                    pass
+                        logger.info(f"[PUBSUB] Received: {data.get('transaction_id', 'unknown')[:8]}...")
+                        # Store latest result in Redis (for late connections to fetch)
+                        redis_conn.setex("latest_fraud_result", 3600, json.dumps(data))
+                        # Queue message for real-time delivery to connected clients
+                        message_queue.put(data)
+                        logger.info(f"[PUBSUB] Queued for {len(connected_clients)} WebSocket clients")
                     except Exception as e:
                         logger.error(f"[PUBSUB] Failed to parse message: {e}")
         except Exception as e:
             logger.error(f"[PUBSUB] Listener error: {e}")
     
-    pubsub_thread = threading.Thread(target=listen_and_broadcast, daemon=True)
+    pubsub_thread = threading.Thread(target=listen_and_queue, daemon=True)
     pubsub_thread.start()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -282,22 +280,45 @@ async def websocket_fraud_results(websocket: WebSocket):
     Results are streamed from Redis pub/sub channel via background listener.
     """
     await websocket.accept()
-    connected_clients.add(websocket)
+    connected_clients.append(websocket)
     logger.info(f"[WEBSOCKET] Client connected. Total clients: {len(connected_clients)}")
     
     try:
-        # Keep connection alive while client is connected
+        # Send latest result if available (for late connections)
+        try:
+            latest = redis_client.get("latest_fraud_result")
+            if latest:
+                data = json.loads(latest)
+                logger.info(f"[WEBSOCKET] Sending latest result to new client")
+                await websocket.send_json(data)
+        except Exception as e:
+            logger.debug(f"[WEBSOCKET] No latest result available: {e}")
+        
+        # Now listen for new results
         while True:
-            # Wait for any client message (optional heartbeat/ping)
-            data = await websocket.receive_text()
-            logger.debug(f"[WEBSOCKET] Received from client: {data}")
+            try:
+                msg = message_queue.get_nowait()
+                logger.info(f"[WEBSOCKET] Sending fraud result to client: {msg.get('transaction_id', 'unknown')}")
+                await websocket.send_json(msg)
+                logger.info(f"[WEBSOCKET] ✓ Message sent successfully")
+            except Exception as e:
+                if e.__class__.__name__ == 'Empty':
+                    # Queue empty, sleep briefly before checking again
+                    await asyncio.sleep(0.2)
+                else:
+                    # Real error - log it but continue
+                    logger.error(f"[WEBSOCKET] Error sending message: {type(e).__name__}: {e}")
+                    await asyncio.sleep(0.2)
     except WebSocketDisconnect:
-        connected_clients.discard(websocket)
+        try:
+            connected_clients.remove(websocket)
+        except:
+            pass
         logger.info(f"[WEBSOCKET] Client disconnected. Total clients: {len(connected_clients)}")
     except Exception as e:
-        logger.error(f"[WEBSOCKET] Error: {e}")
+        logger.error(f"[WEBSOCKET] Error: {type(e).__name__}: {e}")
         try:
-            connected_clients.discard(websocket)
+            connected_clients.remove(websocket)
         except:
             pass
 

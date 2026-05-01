@@ -266,88 +266,6 @@ const App: React.FC = () => {
       </div>
 
       <div className="container">
-        {/* Consumer Status Panel */}
-        <section className="card consumer-card">
-          <div className="card-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {wsConnected ? (
-                <Wifi size={20} style={{ color: '#10b981' }} />
-              ) : (
-                <WifiOff size={20} style={{ color: '#ef4444' }} />
-              )}
-              <h2>Real-Time Consumer Pipeline</h2>
-            </div>
-          </div>
-          <div className="consumer-content">
-            <div className="connection-status">
-              <span className={`status-badge ${wsConnected ? 'connected' : 'disconnected'}`}>
-                {wsConnected ? '● Connected' : '● Disconnected'}
-              </span>
-            </div>
-            
-            {consumerStatus ? (
-              <div className="consumer-status-details">
-                <div className="status-row">
-                  <label>Transaction ID:</label>
-                  <span>{consumerStatus.transaction_id.substring(0, 12)}...</span>
-                </div>
-                {consumerStatus.amount && (
-                  <div className="status-row">
-                    <label>Amount:</label>
-                    <span>${consumerStatus.amount.toFixed(2)}</span>
-                  </div>
-                )}
-                {consumerStatus.merchant && (
-                  <div className="status-row">
-                    <label>Merchant:</label>
-                    <span>{consumerStatus.merchant}</span>
-                  </div>
-                )}
-                <div className="status-row">
-                  <label>Fraud Score:</label>
-                  <div
-                    style={{
-                      padding: '4px 8px',
-                      backgroundColor: getFraudScoreColor(consumerStatus.fraud_score),
-                      color: 'white',
-                      borderRadius: '4px',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    {(consumerStatus.fraud_score * 100).toFixed(1)}%
-                  </div>
-                </div>
-                <div className="status-row">
-                  <label>Decision:</label>
-                  <div
-                    style={{
-                      padding: '4px 8px',
-                      backgroundColor: consumerStatus.decision === 'blocked' ? '#ef4444' : '#10b981',
-                      color: 'white',
-                      borderRadius: '4px',
-                      fontWeight: 'bold',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {consumerStatus.decision}
-                  </div>
-                </div>
-                <div className="status-row">
-                  <label>Processed:</label>
-                  <span>{new Date(consumerStatus.timestamp).toLocaleString()}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-state">
-                <p>Waiting for fraud detection results...</p>
-                <p style={{ fontSize: '12px', color: '#6b7280' }}>
-                  Submit transactions to see results
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
         {/* Authentication Section */}
         <section className="card auth-card">
           <div className="card-header">
@@ -451,6 +369,88 @@ const App: React.FC = () => {
           >
             {loading ? 'Processing...' : 'Submit Transaction'}
           </button>
+        </section>
+
+        {/* Consumer Status Panel */}
+        <section className="card consumer-card">
+          <div className="card-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {wsConnected ? (
+                <Wifi size={20} style={{ color: '#10b981' }} />
+              ) : (
+                <WifiOff size={20} style={{ color: '#ef4444' }} />
+              )}
+              <h2>Real-Time Consumer Pipeline</h2>
+            </div>
+          </div>
+          <div className="consumer-content">
+            <div className="connection-status">
+              <span className={`status-badge ${wsConnected ? 'connected' : 'disconnected'}`}>
+                {wsConnected ? '● Connected' : '● Disconnected'}
+              </span>
+            </div>
+            
+            {consumerStatus ? (
+              <div className="consumer-status-details">
+                <div className="status-row">
+                  <label>Transaction ID:</label>
+                  <span>{consumerStatus.transaction_id.substring(0, 12)}...</span>
+                </div>
+                {consumerStatus.amount && (
+                  <div className="status-row">
+                    <label>Amount:</label>
+                    <span>${consumerStatus.amount.toFixed(2)}</span>
+                  </div>
+                )}
+                {consumerStatus.merchant && (
+                  <div className="status-row">
+                    <label>Merchant:</label>
+                    <span>{consumerStatus.merchant}</span>
+                  </div>
+                )}
+                <div className="status-row">
+                  <label>Fraud Score:</label>
+                  <div
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: getFraudScoreColor(consumerStatus.fraud_score),
+                      color: 'white',
+                      borderRadius: '4px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {(consumerStatus.fraud_score * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="status-row">
+                  <label>Decision:</label>
+                  <div
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: consumerStatus.decision === 'blocked' ? '#ef4444' : '#10b981',
+                      color: 'white',
+                      borderRadius: '4px',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {consumerStatus.decision}
+                  </div>
+                </div>
+                <div className="status-row">
+                  <label>Processed:</label>
+                  <span>{new Date(consumerStatus.timestamp).toLocaleString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <p>Waiting for fraud detection results...</p>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                  Submit transactions to see results
+                </p>
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Status Messages */}
