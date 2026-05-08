@@ -6,3 +6,4 @@ redis==5.0.0
 pybreaker==1.4.0
 python-dotenv==1.0.0
 numpy==1.24.3
+psutil==5.9.6
