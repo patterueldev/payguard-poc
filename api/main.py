@@ -56,12 +56,22 @@ class TransactionRequest(BaseModel):
     amount: float
     merchant: str
     description: str = ""
+    pin_verified: bool = False
 
 class TransactionResponse(BaseModel):
     """Response after transaction is accepted"""
     status: str
     transaction_id: str
     message: str
+
+class ToleranceConfig(BaseModel):
+    """Configurable fraud-detection tolerance thresholds"""
+    layer1_threshold: float = 0.4
+    layer2_threshold: float = 0.7
+    anomaly_ratio:    float = 3.0
+    habit_weight:     float = 0.4
+    seasonal_weight:  float = 0.2
+    merchant_weight:  float = 0.4
 
 # ══════════════════════════════════════════════════════════════════════════════
 # KAFKA PRODUCER
@@ -263,13 +273,82 @@ async def submit_transaction(
 async def get_demo_token(user_id: str):
     """
     Generate a demo JWT token for testing.
-    
-    In production, this would validate credentials against a user database.
-    For demo purposes, accept any user_id.
+    Also initialises user balance in Redis if this is a new user.
     """
     token = jwt.encode({"sub": user_id}, SECRET_KEY, algorithm=ALGORITHM)
     logger.info(f"[JWT GENERATION] Generated token for user={user_id}")
-    return {"access_token": token, "token_type": "bearer"}
+
+    # Initialise or retrieve balance
+    balance = None
+    try:
+        rc = get_redis_client()
+        key = f"user:{user_id}:balance"
+        raw = rc.get(key)
+        if raw is None:
+            import random
+            balance = round(random.uniform(500.0, 5000.0), 2)
+            rc.set(key, str(balance))
+            logger.info(f"[BALANCE] Initialised for user={user_id}: ${balance:.2f}")
+        else:
+            balance = float(raw)
+    except Exception as e:
+        logger.warning(f"[BALANCE] Could not read/init balance: {e}")
+
+    return {"access_token": token, "token_type": "bearer", "balance": balance}
+
+
+@app.post("/auth/pin")
+async def verify_pin(user_id: str, pin: str):
+    """
+    Mock PIN/biometric verification endpoint.
+    Any 4–6 digit PIN is accepted (demo only).
+    """
+    if pin.isdigit() and 4 <= len(pin) <= 6:
+        logger.info(f"[PIN AUTH] ✓ PIN verified for user={user_id}")
+        return {"verified": True, "method": "pin", "user_id": user_id}
+    return {"verified": False, "method": "pin", "user_id": user_id}
+
+
+@app.get("/tolerance")
+async def get_tolerance_config():
+    """Return the current fraud-detection tolerance thresholds."""
+    defaults = {
+        "layer1_threshold": 0.4,
+        "layer2_threshold": 0.7,
+        "anomaly_ratio":    3.0,
+        "habit_weight":     0.4,
+        "seasonal_weight":  0.2,
+        "merchant_weight":  0.4,
+    }
+    try:
+        rc = get_redis_client()
+        cfg = rc.hgetall("config:tolerance")
+        if cfg:
+            return {k: float(v) for k, v in cfg.items()}
+    except Exception as e:
+        logger.warning(f"[TOLERANCE] Redis read failed: {e}")
+    return defaults
+
+
+@app.put("/tolerance")
+async def update_tolerance_config(config: ToleranceConfig):
+    """Persist new tolerance thresholds to Redis (consumer picks them up on next transaction)."""
+    mapping = {
+        "layer1_threshold": str(config.layer1_threshold),
+        "layer2_threshold": str(config.layer2_threshold),
+        "anomaly_ratio":    str(config.anomaly_ratio),
+        "habit_weight":     str(config.habit_weight),
+        "seasonal_weight":  str(config.seasonal_weight),
+        "merchant_weight":  str(config.merchant_weight),
+    }
+    try:
+        rc = get_redis_client()
+        rc.hset("config:tolerance", mapping=mapping)
+        logger.info(f"[TOLERANCE] Updated config: {mapping}")
+        return {"status": "updated", "config": config}
+    except Exception as e:
+        logger.error(f"[TOLERANCE] Failed to save config: {e}")
+        raise HTTPException(status_code=503, detail="Could not save tolerance config")
 
 @app.websocket("/ws/fraud-results")
 async def websocket_fraud_results(websocket: WebSocket):

@@ -16,6 +16,9 @@ import redis
 import numpy as np
 import logging
 import os
+import time
+import datetime
+import random
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)
@@ -139,3 +142,95 @@ class FeatureExtractor:
             f"count={old_count}→{new_count}, "
             f"avg=${old_avg:.2f}→${new_avg:.2f}"
         )
+
+    def get_tolerance_components(self, transaction: Dict, profile: Dict) -> Dict:
+        """
+        Calculate per-component tolerance scores (0.0 = safe, 1.0 = very suspicious).
+
+        Components:
+          - habit_score   : how much this deviates from the user's typical spending
+          - seasonal_score: risk based on time-of-day / day-of-week patterns
+          - merchant_score: risk based on merchant name / category signals
+        """
+        amount = transaction['amount']
+        merchant = transaction.get('merchant', '')
+        ts = transaction.get('timestamp', time.time())
+
+        # ── 1. Habit score ────────────────────────────────────────────────────
+        avg_amount = profile.get('avg_amount', 0.0)
+        tx_count = profile.get('tx_count', 0)
+
+        if avg_amount > 0 and tx_count >= 2:
+            ratio = amount / avg_amount
+            # ratio 1.0 = normal; ratio 5.0+ = very suspicious → maps to 0.0–1.0
+            habit_score = min(1.0, max(0.0, (ratio - 1.0) / 4.0))
+        elif tx_count == 0:
+            habit_score = 0.1   # first-ever transaction: slight uncertainty
+        else:
+            habit_score = 0.2   # too few transactions to form a baseline
+
+        # ── 2. Seasonal / time score ─────────────────────────────────────────
+        dt = datetime.datetime.fromtimestamp(ts)
+        hour = dt.hour
+
+        if 0 <= hour <= 4:
+            time_risk = 0.8    # late night
+        elif 5 <= hour <= 8:
+            time_risk = 0.3    # early morning
+        elif 9 <= hour <= 21:
+            time_risk = 0.0    # normal business hours
+        else:
+            time_risk = 0.4    # late evening
+
+        if dt.weekday() >= 5:  # Saturday / Sunday
+            time_risk = min(1.0, time_risk + 0.1)
+
+        seasonal_score = time_risk
+
+        # ── 3. Merchant score ────────────────────────────────────────────────
+        ml = merchant.lower()
+        high_risk_kw    = ['offshore', 'unknown', 'crypto', 'casino', 'wire', '.biz', 'foreign']
+        medium_risk_kw  = ['international', 'atm', 'withdrawal', 'western union', 'pawnshop']
+        low_risk_kw     = [
+            'starbucks', 'target', 'walmart', 'amazon', 'mcdonalds', 'shell',
+            'bp', 'costco', 'cvs', 'walgreens', 'apple', 'netflix', 'spotify',
+        ]
+
+        if any(kw in ml for kw in high_risk_kw):
+            merchant_score = 0.9
+        elif any(kw in ml for kw in low_risk_kw):
+            merchant_score = 0.05
+        elif any(kw in ml for kw in medium_risk_kw):
+            merchant_score = 0.5
+        else:
+            merchant_score = 0.25   # unknown merchant
+
+        components = {
+            'habit_score':    round(habit_score,    4),
+            'seasonal_score': round(seasonal_score, 4),
+            'merchant_score': round(merchant_score, 4),
+        }
+        logger.info(
+            f"[TOLERANCE] habit={habit_score:.2f}  "
+            f"seasonal={seasonal_score:.2f}  merchant={merchant_score:.2f}"
+        )
+        return components
+
+    def get_or_init_balance(self, user_id: str) -> float:
+        """Return user's available balance, initialising a random value for new users."""
+        key = f"user:{user_id}:balance"
+        raw = self.redis_client.get(key)
+        if raw is None:
+            initial = round(random.uniform(500.0, 5000.0), 2)
+            self.redis_client.set(key, str(initial))
+            logger.info(f"[BALANCE] Initialised balance for user={user_id}: ${initial:.2f}")
+            return initial
+        return float(raw)
+
+    def deduct_balance(self, user_id: str, amount: float) -> float:
+        """Deduct amount from user balance on approved transactions. Returns new balance."""
+        key = f"user:{user_id}:balance"
+        current = self.get_or_init_balance(user_id)
+        new_balance = round(max(0.0, current - amount), 2)
+        self.redis_client.set(key, str(new_balance))
+        return new_balance
